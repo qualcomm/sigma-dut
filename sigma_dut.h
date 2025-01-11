@@ -602,6 +602,19 @@ struct twt_config_params {
 	int ifindex;
 };
 
+struct ap_mlo_link {
+	bool configured;
+	int chwidth;
+	int channel;
+};
+
+enum ap_band {
+	AP_BAND_24GHz,
+	AP_BAND_5GHz,
+	AP_BAND_6GHz,
+	AP_BAND_MAX,
+};
+
 struct sigma_dut {
 	const char *main_ifname;
 	char *main_ifname_2g;
@@ -612,10 +625,12 @@ struct sigma_dut {
 	char *p2p_ifname_buf;
 	int use_5g;
 	int ap_band_6g;
+	int ap_band;
 	int ap_center_freq;
 	int ap_punct_bitmap;
 	int sta_2g_started;
 	int sta_5g_started;
+	struct ap_mlo_link ap_mlo_links[AP_BAND_MAX];
 
 	int s; /* server TCP socket */
 	int debug_level;
@@ -948,6 +963,7 @@ struct sigma_dut {
 	int ap_name;
 	int ap_interface_5g;
 	int ap_interface_2g;
+	int ap_interface_6g;
 	int ap_assoc_delay;
 	int ap_btmreq_bss_term_tsf;
 	int ap_fils_dscv_int;
