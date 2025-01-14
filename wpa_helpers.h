@@ -30,6 +30,8 @@ int get_wpa_ssid_bssid(struct sigma_dut *dut, const char *ifname,
 		       char *buf, size_t buf_size);
 int get_hapd_config(const char *ifname, const char *field, char *obuf,
 		    size_t obuf_size);
+int get_hapd_status(const char *ifname, const char *field, char *obuf,
+		   size_t obuf_size);
 void remove_wpa_networks(const char *ifname);
 int get_mlo_link_mac_ap_link(struct sigma_dut *dut, const char *ifname,
 			     const char *ap_link_addr,

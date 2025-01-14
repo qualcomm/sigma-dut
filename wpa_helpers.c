@@ -720,7 +720,7 @@ static int get_wpa_ctrl_status_field(const char *path, const char *ifname,
 	return -1;
 }
 
-static int get_hapd_status(const char *ifname, const char *field, char *obuf,
+int get_hapd_status(const char *ifname, const char *field, char *obuf,
 		   size_t obuf_size)
 {
 	const char *path = sigma_hapd_ctrl ?

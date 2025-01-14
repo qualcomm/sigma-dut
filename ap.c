@@ -12783,6 +12783,52 @@ enum sigma_cmd_result cmd_ap_send_frame(struct sigma_dut *dut,
 }
 
 
+static int ap_get_mlo_link_addr(struct sigma_dut *dut, const char *ifname,
+				int link_band, char *link_addr)
+{
+	char buf[4096];
+	int freq;
+	int freq_band;
+
+	if (get_hapd_status(ifname, "freq", buf, sizeof(buf)) < 0) {
+		sigma_dut_print(dut, DUT_MSG_DEBUG,
+				"%s: Failed to get link freq",
+				__func__);
+		return -1;
+	}
+
+	freq = atoi(buf);
+	if (is_6ghz_freq(freq))
+		freq_band = AP_BAND_6GHz;
+	else if (freq >= 2412 && freq <= 2484)
+		freq_band = AP_BAND_24GHz;
+	else
+		freq_band = AP_BAND_5GHz;
+
+	if (link_band == freq_band) {
+		if (get_hapd_status(ifname, "link_addr", buf,
+				    sizeof(buf)) < 0) {
+			sigma_dut_print(dut, DUT_MSG_DEBUG,
+					"%s: Failed to get link addr",
+					__func__);
+			return -1;
+		}
+		strlcpy(link_addr, buf, 18);
+	} else {
+		if (get_hapd_status(ifname, "partner_link[1]", buf,
+				    sizeof(buf)) < 0) {
+			sigma_dut_print(dut, DUT_MSG_DEBUG,
+					"%s: Failed to get partner link addr",
+					__func__);
+			return -1;
+		}
+		strlcpy(link_addr, buf, 18);
+	}
+
+	return 0;
+}
+
+
 static enum sigma_cmd_result cmd_ap_get_mac_address(struct sigma_dut *dut,
 						    struct sigma_conn *conn,
 						    struct sigma_cmd *cmd)
@@ -12796,6 +12842,8 @@ static enum sigma_cmd_result cmd_ap_get_mac_address(struct sigma_dut *dut,
 	struct ifreq ifr;
 	int s, wlan_tag = 1;
 	const char *val;
+	char link_addr[18];
+	int link_band = -1;
 
 	val = get_param(cmd, "WLAN_TAG");
 	if (val) {
@@ -12812,6 +12860,28 @@ static enum sigma_cmd_result cmd_ap_get_mac_address(struct sigma_dut *dut,
 	}
 
 	get_if_name(dut, ifname, sizeof(ifname), wlan_tag);
+
+	val = get_param(cmd, "INTERFACE");
+	if (val) {
+		if (strcasecmp(val, "5G") == 0)
+			link_band = AP_BAND_5GHz;
+		else if (strcasecmp(val, "6G") == 0)
+			link_band = AP_BAND_6GHz;
+		else if (strcasecmp(val, "24G") == 0)
+			link_band = AP_BAND_24GHz;
+	}
+
+	/* Get link MAC address for AP MLD cases */
+	if (dut->ap_mode == AP_11be && link_band >= 0) {
+		if (ap_get_mlo_link_addr(dut, ifname, link_band, link_addr)) {
+			send_resp(dut, conn, SIGMA_ERROR,
+				  "errorCode,Could not get link address");
+			return STATUS_SENT_ERROR;
+		}
+		snprintf(resp, sizeof(resp), "mac,%s", link_addr);
+		send_resp(dut, conn, SIGMA_COMPLETE, resp);
+		return STATUS_SENT;
+	}
 
 	s = socket(AF_INET, SOCK_DGRAM, 0);
 	if (s < 0)
