@@ -9305,13 +9305,15 @@ write_conf:
 		}
 
 		fprintf(f, "mld_ap=1\n");
-		/* Use the same MLD and link MAC address */
-		fprintf(f, "mld_addr=%02x:%02x:%02x:%02x:%02x:%02x\n",
-			addr[0], addr[1], addr[2],
-			addr[3], addr[4], addr[5]);
-		fprintf(f, "bssid=%02x:%02x:%02x:%02x:%02x:%02x\n",
-			addr[0], addr[1], addr[2],
-			addr[3], addr[4], addr[5]);
+		if (!dut->ap_is_mlo) {
+			/* Use the same MLD and link MAC address */
+			fprintf(f, "mld_addr=%02x:%02x:%02x:%02x:%02x:%02x\n",
+				addr[0], addr[1], addr[2],
+				addr[3], addr[4], addr[5]);
+			fprintf(f, "bssid=%02x:%02x:%02x:%02x:%02x:%02x\n",
+				addr[0], addr[1], addr[2],
+				addr[3], addr[4], addr[5]);
+		}
 	}
 
 	if (conf_counter == 1) {
