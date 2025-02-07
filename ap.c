@@ -3341,6 +3341,8 @@ static enum sigma_cmd_result cmd_ap_set_security(struct sigma_dut *dut,
 	val = get_param(cmd, "BeaconProtection");
 	if (val)
 		dut->ap_beacon_prot = atoi(val);
+	else if (dut->ap_mode == AP_11be)
+		dut->ap_beacon_prot = 1;
 
 	val = get_param(cmd, "Transition_Disable");
 	if (val) {
