@@ -1082,6 +1082,7 @@ struct sigma_dut {
 	const char *set_macaddr;
 	int tmp_mac_addr;
 	int ap_is_dual;
+	int ap_is_mlo;
 	enum ap_mode ap_mode_1;
 	enum ap_chwidth ap_chwidth_1;
 	int ap_channel_1;
