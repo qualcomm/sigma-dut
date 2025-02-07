@@ -128,7 +128,7 @@ static void ath_ap_set_params(struct sigma_dut *dut);
 static int kill_process(struct sigma_dut *dut, char *proc_name,
 			unsigned char is_proc_instance_one, int sig);
 static int get_oper_centr_freq_seq_idx(struct sigma_dut *dut, int chwidth,
-				       int channel);
+				       int channel, int band);
 
 
 int fwtest_cmd_wrapper(struct sigma_dut *dut, const char *arg,
@@ -996,7 +996,8 @@ static int get_bitmap_from_punct_chlist(struct sigma_dut *dut,
 		center_chan_idx = freq_to_chan(dut->ap_center_freq);
 	else
 		center_chan_idx = get_oper_centr_freq_seq_idx(dut, chwidth,
-							      dut->ap_channel);
+							      dut->ap_channel,
+							      dut->ap_band);
 	if (center_chan_idx < 0) {
 		sigma_dut_print(dut, DUT_MSG_ERROR,
 				"%s: couldn't get center channel index",
@@ -8419,7 +8420,7 @@ static void set_ebtables_forward_drop(struct sigma_dut *dut,
 }
 
 
-static int check_channel(struct sigma_dut *dut, int channel)
+static int check_channel(struct sigma_dut *dut, int channel, int band)
 {
 	int channel_list[] = { 36, 40, 44, 48, 52, 60, 64, 100, 104, 108, 112,
 			       116, 120, 124, 128, 132, 140, 144, 149, 153, 157,
@@ -8433,7 +8434,7 @@ static int check_channel(struct sigma_dut *dut, int channel)
 	int num_chan, *chan_list;
 	int i;
 
-	if (dut->ap_band_6g) {
+	if (band == AP_BAND_6GHz) {
 		num_chan = ARRAY_SIZE(chan_list_6g);
 		chan_list = chan_list_6g;
 	} else {
@@ -8496,15 +8497,15 @@ static int get_6g_ch_op_class(int channel)
 
 
 static int get_oper_centr_freq_seq_idx(struct sigma_dut *dut, int chwidth,
-				       int channel)
+				       int channel, int band)
 {
 	int ch_base;
 	int period;
 
-	if (check_channel(dut, channel) < 0)
+	if (check_channel(dut, channel, band) < 0)
 		return -1;
 
-	if (dut->ap_band_6g)
+	if (band == AP_BAND_6GHz)
 		return get_oper_center_freq_6g(chwidth, channel);
 
 	if (channel >= 36 && channel <= 64)
@@ -10031,7 +10032,8 @@ skip_key_mgmt:
 		if (!append_vht)
 			goto skip_vht_parameters_set;
 
-		if (check_channel(dut, chan) < 0) {
+		if (band != AP_BAND_24GHz &&
+		    check_channel(dut, chan, band) < 0) {
 			send_resp(dut, conn, SIGMA_INVALID,
 				  "errorCode,Invalid channel");
 			fclose(f);
@@ -10049,37 +10051,37 @@ skip_key_mgmt:
 			dut->ap_vht_chwidth = AP_20_40_VHT_OPER_CHWIDTH;
 			vht_oper_centr_freq_idx =
 				get_oper_centr_freq_seq_idx(dut, 20,
-							    chan);
+							    chan, band);
 			break;
 		case AP_40:
 			dut->ap_vht_chwidth = AP_20_40_VHT_OPER_CHWIDTH;
 			vht_oper_centr_freq_idx =
 				get_oper_centr_freq_seq_idx(dut, 40,
-							    chan);
+							    chan, band);
 			break;
 		case AP_80:
 			dut->ap_vht_chwidth = AP_80_VHT_OPER_CHWIDTH;
 			vht_oper_centr_freq_idx =
 				get_oper_centr_freq_seq_idx(dut, 80,
-							    chan);
+							    chan, band);
 			break;
 		case AP_160:
 			dut->ap_vht_chwidth = AP_160_VHT_OPER_CHWIDTH;
 			vht_oper_centr_freq_idx =
 				get_oper_centr_freq_seq_idx(dut, 160,
-							    chan);
+							    chan, band);
 			break;
 		case AP_320:
 			dut->ap_vht_chwidth = AP_320_VHT_OPER_CHWIDTH;
 			vht_oper_centr_freq_idx =
 				get_oper_centr_freq_seq_idx(dut, 320,
-							    chan);
+							    chan, band);
 			break;
 		default:
 			dut->ap_vht_chwidth = VHT_DEFAULT_OPER_CHWIDTH;
 			vht_oper_centr_freq_idx =
 				get_oper_centr_freq_seq_idx(dut, 80,
-							    chan);
+							    chan, band);
 			break;
 		}
 
@@ -15239,9 +15241,8 @@ static int hostapd_chan_switch(struct sigma_dut *dut, const char *ifname,
 		if (is_6g || channel > 14)  {
 			sec_channel_offset = get_sec_channel_offset(channel,
 								    is_6g);
-			center_freq_idx = get_oper_centr_freq_seq_idx(dut,
-								      chwidth,
-								      channel);
+			center_freq_idx = get_oper_centr_freq_seq_idx(
+				dut, chwidth, channel, dut->ap_band);
 		} else {
 			sec_channel_offset = 1;
 			center_freq_idx = channel + 10;
@@ -15575,7 +15576,8 @@ static int mac80211_vht_chnum_band(struct sigma_dut *dut, const char *ifname,
 	if (result)
 		chwidth = atoi(result);
 
-	center_freq_idx = get_oper_centr_freq_seq_idx(dut, chwidth, channel);
+	center_freq_idx = get_oper_centr_freq_seq_idx(dut, chwidth,
+						      channel, dut->ap_band);
 	if (center_freq_idx < 0) {
 		free(token);
 		return -1;
@@ -15625,7 +15627,8 @@ mac80211_he_tx_bandwidth(struct sigma_dut *dut, struct sigma_conn *conn,
 
 	width = atoi(val);
 	center_freq_idx = get_oper_centr_freq_seq_idx(dut, width,
-						      dut->ap_channel);
+						      dut->ap_channel,
+						      dut->ap_band);
 	if (center_freq_idx < 0)
 		return ERROR_SEND_STATUS;
 
