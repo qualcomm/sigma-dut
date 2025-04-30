@@ -1204,10 +1204,12 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 	if (val) {
 		int freq = atoi(val);
 
-		if (is_6ghz_freq(freq))
+		if (is_6ghz_freq(freq)) {
 			dut->ap_band_6g = 1;
-		else
+			dut->ap_band = AP_BAND_6GHz;
+		} else {
 			dut->ap_band_6g = 0;
+		}
 
 		dut->ap_center_freq = 0;
 		if (get_param(cmd, "CHANNEL")) {
