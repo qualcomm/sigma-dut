@@ -1085,6 +1085,51 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 		}
 	}
 
+	val = get_param(cmd, "MODE");
+	if (val) {
+		char *str, *pos;
+
+		str = strdup(val);
+		if (str == NULL)
+			return INVALID_SEND_STATUS;
+		pos = strchr(str, ';');
+		if (pos)
+			*pos++ = '\0';
+		if (wlan_tag != 2)
+			dut->ap_is_dual = 0;
+		dut->ap_mode = get_mode(str);
+		if (dut->ap_mode == AP_inval) {
+			send_resp(dut, conn, SIGMA_INVALID,
+				  "errorCode,Unsupported MODE");
+			free(str);
+			return STATUS_SENT;
+		}
+		if (dut->ap_mode == AP_11ac && dut->ap_80plus80 != 1)
+			dut->ap_chwidth = AP_80;
+
+		if (pos) {
+			dut->ap_mode_1 = get_mode(pos);
+			if (dut->ap_mode_1 == AP_inval) {
+				send_resp(dut, conn, SIGMA_INVALID,
+					  "errorCode,Unsupported MODE");
+				free(str);
+				return STATUS_SENT;
+			}
+			if (dut->ap_mode_1 == AP_11ac)
+				dut->ap_chwidth_1 = AP_80;
+			dut->ap_is_dual = 1;
+		}
+
+		free(str);
+	} else if (dut->ap_mode == AP_inval) {
+		if (dut->ap_channel <= 11)
+			dut->ap_mode = AP_11ng;
+		else if (dut->program == PROGRAM_VHT)
+			dut->ap_mode = AP_11ac;
+		else
+			dut->ap_mode = AP_11na;
+	}
+
 	val = get_param(cmd, "Interface");
 	if (val) {
 		if (strcasecmp(val, "5G") == 0) {
@@ -1238,51 +1283,6 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 		else
 			sigma_dut_print(dut, DUT_MSG_ERROR,
 					"Unsupported dfs_mode value: %s", val);
-	}
-
-	val = get_param(cmd, "MODE");
-	if (val) {
-		char *str, *pos;
-
-		str = strdup(val);
-		if (str == NULL)
-			return INVALID_SEND_STATUS;
-		pos = strchr(str, ';');
-		if (pos)
-			*pos++ = '\0';
-		if (wlan_tag != 2)
-			dut->ap_is_dual = 0;
-		dut->ap_mode = get_mode(str);
-		if (dut->ap_mode == AP_inval) {
-			send_resp(dut, conn, SIGMA_INVALID,
-				  "errorCode,Unsupported MODE");
-			free(str);
-			return STATUS_SENT;
-		}
-		if (dut->ap_mode == AP_11ac && dut->ap_80plus80 != 1)
-			dut->ap_chwidth = AP_80;
-
-		if (pos) {
-			dut->ap_mode_1 = get_mode(pos);
-			if (dut->ap_mode_1 == AP_inval) {
-				send_resp(dut, conn, SIGMA_INVALID,
-					  "errorCode,Unsupported MODE");
-				free(str);
-				return STATUS_SENT;
-			}
-			if (dut->ap_mode_1 == AP_11ac)
-				dut->ap_chwidth_1 = AP_80;
-			dut->ap_is_dual = 1;
-		}
-
-		free(str);
-	} else if (dut->ap_mode == AP_inval) {
-		if (dut->ap_channel <= 11)
-			dut->ap_mode = AP_11ng;
-		else if (dut->program == PROGRAM_VHT)
-			dut->ap_mode = AP_11ac;
-		else
-			dut->ap_mode = AP_11na;
 	}
 
 	/* Override the AP mode in case of 60 GHz */
