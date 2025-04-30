@@ -971,12 +971,23 @@ static int wcn_set_txbf_periodic_ndp(struct sigma_dut *dut, const char *intf,
 
 
 static int get_bitmap_from_punct_chlist(struct sigma_dut *dut,
-					const char *punct_channel_list)
+					const char *punct_channel_list,
+					int mlo_band)
 {
 	int center_chan_idx, start_chan_idx, end_chan_idx;
-	int chwidth, punct_bitmap = 0;
+	int chwidth, punct_bitmap = 0, ap_chwidth, ap_channel, ap_band;
 
-	switch (dut->ap_chwidth) {
+	if (dut->ap_mode != AP_11be) {
+		ap_chwidth = dut->ap_chwidth;
+		ap_channel = dut->ap_channel;
+		ap_band = dut->ap_band;
+	} else {
+		ap_chwidth = dut->ap_mlo_links[mlo_band].chwidth;
+		ap_channel = dut->ap_mlo_links[mlo_band].channel;
+		ap_band = mlo_band;
+	}
+
+	switch (ap_chwidth) {
 	case AP_80:
 		chwidth = 80;
 		break;
@@ -996,8 +1007,8 @@ static int get_bitmap_from_punct_chlist(struct sigma_dut *dut,
 		center_chan_idx = freq_to_chan(dut->ap_center_freq);
 	else
 		center_chan_idx = get_oper_centr_freq_seq_idx(dut, chwidth,
-							      dut->ap_channel,
-							      dut->ap_band);
+							      ap_channel,
+							      ap_band);
 	if (center_chan_idx < 0) {
 		sigma_dut_print(dut, DUT_MSG_ERROR,
 				"%s: couldn't get center channel index",
@@ -2651,7 +2662,8 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 
 	val = get_param(cmd, "PunctChannel");
 	if (val) {
-		dut->ap_punct_bitmap = get_bitmap_from_punct_chlist(dut, val);
+		dut->ap_punct_bitmap = get_bitmap_from_punct_chlist(
+						dut, val, mlo_config_band);
 		if (dut->ap_punct_bitmap < 0) {
 			send_resp(dut, conn, SIGMA_INVALID,
 				  "errorCode,Invalid PunctChannel");
@@ -15460,6 +15472,7 @@ static enum sigma_cmd_result wcn_ap_set_rfeature(struct sigma_dut *dut,
 	const char *val;
 	const char *ifname;
 	const char *type = get_param(cmd, "type");
+	int ap_chwidth, mlo_band = 0;
 
 	ifname = get_main_ifname(dut);
 
@@ -15467,28 +15480,49 @@ static enum sigma_cmd_result wcn_ap_set_rfeature(struct sigma_dut *dut,
 	if (val && wcn_vht_chnum_band(dut, ifname, type, val) < 0)
 		return ERROR_SEND_STATUS;
 
+	if (dut->ap_mode != AP_11be) {
+		ap_chwidth = dut->ap_chwidth;
+	} else {
+		val = get_param(cmd, "Interface");
+		if (val) {
+			if (strcasecmp(val, "5G") == 0)
+				mlo_band = AP_BAND_5GHz;
+			else if (strcasecmp(val, "24G") == 0)
+				mlo_band = AP_BAND_24GHz;
+			else
+				mlo_band = AP_BAND_6GHz;
+		}
+		ap_chwidth = dut->ap_mlo_links[mlo_band].chwidth;
+	}
+
 	val = get_param(cmd, "txBandwidth");
 	if (val) {
-		int old_ch_bw = dut->ap_chwidth;
+		int old_ch_bw = ap_chwidth;
 
 		if (strcasecmp(val, "Auto") == 0) {
-			dut->ap_chwidth = 0;
+			ap_chwidth = 0;
 		} else if (strcasecmp(val, "20") == 0) {
-			dut->ap_chwidth = 0;
+			ap_chwidth = 0;
 		} else if (strcasecmp(val, "40") == 0) {
-			dut->ap_chwidth = 1;
+			ap_chwidth = 1;
 		} else if (strcasecmp(val, "80") == 0) {
-			dut->ap_chwidth = 2;
+			ap_chwidth = 2;
 		} else if (strcasecmp(val, "160") == 0) {
-			dut->ap_chwidth = 3;
+			ap_chwidth = 3;
 		} else if (strcasecmp(val, "320") == 0) {
-			dut->ap_chwidth = 4;
+			ap_chwidth = 4;
 		} else {
 			send_resp(dut, conn, SIGMA_ERROR,
 				  "ErrorCode,WIDTH not supported");
 			return STATUS_SENT_ERROR;
 		}
-		if (old_ch_bw != dut->ap_chwidth) {
+		if (old_ch_bw != ap_chwidth) {
+			if (dut->ap_mode != AP_11be)
+				dut->ap_chwidth = ap_chwidth;
+			else
+				dut->ap_mlo_links[mlo_band].chwidth =
+					ap_chwidth;
+
 			if (cmd_ap_config_commit(dut, conn, cmd) <= 0)
 				return STATUS_SENT_ERROR;
 		} else {
@@ -15651,7 +15685,7 @@ static enum sigma_cmd_result wcn_ap_set_rfeature(struct sigma_dut *dut,
 	if (val) {
 		int chwidth;
 
-		switch (dut->ap_chwidth) {
+		switch (ap_chwidth) {
 		case AP_80:
 			chwidth = 80;
 			break;
@@ -15665,7 +15699,8 @@ static enum sigma_cmd_result wcn_ap_set_rfeature(struct sigma_dut *dut,
 			return ERROR_SEND_STATUS;
 		}
 
-		dut->ap_punct_bitmap = get_bitmap_from_punct_chlist(dut, val);
+		dut->ap_punct_bitmap = get_bitmap_from_punct_chlist(dut, val,
+								    mlo_band);
 		if (dut->ap_punct_bitmap < 0) {
 			send_resp(dut, conn, SIGMA_ERROR,
 				  "errorCode,Invalid punct bitmap");
