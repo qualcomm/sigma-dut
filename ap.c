@@ -1048,6 +1048,40 @@ static int get_bitmap_from_punct_chlist(struct sigma_dut *dut,
 }
 
 
+static int get_channel_band(int channel)
+{
+	int i;
+	int chan_list_2g[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
+	int chan_list_5g[] = { 36, 40, 44, 48, 52, 60, 64, 100, 104, 108,
+			       112, 116, 120, 124, 128, 132, 140, 144, 149,
+			       153, 157, 161, 165 };
+	int chan_list_6g[] = { 2, 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41,
+			       45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85,
+			       89, 93, 97, 101, 105, 109, 113, 117, 121,
+			       125, 129, 133, 137, 141, 145, 149, 153, 157,
+			       161, 165, 169, 173, 177, 181, 185, 189, 193,
+			       197, 201, 205, 209, 213, 217, 221, 225, 229,
+			       233 };
+
+	for (i = 0; i < ARRAY_SIZE(chan_list_2g); i++) {
+		if (channel == chan_list_2g[i])
+			return AP_BAND_24GHz;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(chan_list_5g); i++) {
+		if (channel == chan_list_5g[i])
+			return AP_BAND_5GHz;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(chan_list_6g); i++) {
+		if (channel == chan_list_6g[i])
+			return AP_BAND_6GHz;
+	}
+
+	return AP_BAND_MAX;
+}
+
+
 static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 						 struct sigma_conn *conn,
 						 struct sigma_cmd *cmd)
@@ -1241,8 +1275,22 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 			dut->ap_tag_channel[wlan_tag - 2] = atoi(val);
 		}
 
-		if (dut->ap_mode == AP_11be && mlo_config_band > -1)
+		if (dut->ap_mode == AP_11be) {
+			if (mlo_config_band == -1) {
+				mlo_config_band = get_channel_band(atoi(val));
+				if (mlo_config_band == AP_BAND_MAX) {
+					send_resp(dut, conn, SIGMA_ERROR,
+						  "errorCode,Invalid channel value");
+					sigma_dut_print(dut, DUT_MSG_INFO,
+						"Invalid channel %d",
+							atoi(val));
+					return STATUS_SENT_ERROR;
+				}
+				dut->ap_mlo_links[mlo_config_band].configured =
+					true;
+			}
 			dut->ap_mlo_links[mlo_config_band].channel = atoi(val);
+		}
 	}
 
 	val = get_param(cmd, "ChnlFreq");
