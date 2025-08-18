@@ -607,6 +607,7 @@ struct ap_mlo_link {
 	int chwidth;
 	int channel;
 	int dtim;
+	bool treat_6ghz_as_5ghz; /* In case of dual 5 GHz case */
 };
 
 enum ap_band {
