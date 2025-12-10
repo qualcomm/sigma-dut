@@ -3,6 +3,7 @@
  * Copyright (c) 2014-2017, Qualcomm Atheros, Inc.
  * Copyright (c) 2018-2021, The Linux Foundation
  * Copyright (c) 2005-2011, Jouni Malinen <j@w1.fi>
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * All Rights Reserved.
  * Licensed under the Clear BSD license. See README for more details.
  */

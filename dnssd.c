@@ -1,6 +1,6 @@
 /*
  * Sigma Control API DUT (DNS service discovery functionality)
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * All Rights Reserved.
  * Licensed under the Clear BSD license. See README for more details.
  */
