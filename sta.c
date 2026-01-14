@@ -2659,15 +2659,22 @@ static enum sigma_cmd_result cmd_sta_set_psk(struct sigma_dut *dut,
 			if (set_network(ifname, id, "ieee80211w", "2") < 0)
 				return -2;
 		}
-	} else if (type && strcasecmp(type, "PSK-SAE") == 0) {
+	} else if (type && (strcasecmp(type, "PSK-SAE") == 0 ||
+			    strcasecmp(type, "EPPKE-PSK-SAE") == 0)) {
 		if (val && strcasecmp(val, "wpa2-ft") == 0) {
 			if (set_network(ifname, id, "key_mgmt",
 					"FT-SAE FT-PSK") < 0)
 				return -2;
 		} else if (!akm) {
-			if (set_network(ifname, id, "key_mgmt",
-					"SAE WPA-PSK") < 0)
+			if (strcasecmp(type, "EPPKE-PSK-SAE") == 0) {
+				if (set_network(ifname, id, "key_mgmt",
+						"EPPKE WPA-PSK SAE-EXT-KEY SAE")
+				    < 0)
+					return -2;
+			} else if (set_network(ifname, id, "key_mgmt",
+					       "SAE WPA-PSK") < 0) {
 				return -2;
+			}
 		}
 		if (wpa_command(ifname, "SET sae_groups ") != 0) {
 			sigma_dut_print(dut, DUT_MSG_ERROR,
@@ -4032,7 +4039,8 @@ static enum sigma_cmd_result cmd_sta_set_security(struct sigma_dut *dut,
 		return sta_set_owe(dut, conn, cmd);
 	if (strcasecmp(type, "PSK") == 0 ||
 	    strcasecmp(type, "PSK-SAE") == 0 ||
-	    strcasecmp(type, "SAE") == 0)
+	    strcasecmp(type, "SAE") == 0 ||
+	    strcasecmp(type, "EPPKE-PSK-SAE") == 0)
 		return cmd_sta_set_psk(dut, conn, cmd);
 	if (strcasecmp(type, "EAPTLS") == 0 ||
 	    strcasecmp(type, "EAPTLS_1_3") == 0)
