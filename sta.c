@@ -2020,6 +2020,9 @@ static int set_akm_suites(struct sigma_dut *dut, const char *ifname,
 		case AKM_FT_SAE_EXT_KEY:
 			str = "FT-SAE-EXT-KEY";
 			break;
+		case AKM_EPPKE:
+			str = "EPPKE";
+			break;
 		default:
 			sigma_dut_print(dut, DUT_MSG_ERROR,
 					"Unsupported AKMSuitetype %d", akm);

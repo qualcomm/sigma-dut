@@ -385,6 +385,7 @@ enum akm_suite_values {
 	AKM_OWE = 18,
 	AKM_SAE_EXT_KEY = 24,
 	AKM_FT_SAE_EXT_KEY = 25,
+	AKM_EPPKE = 29,
 
 };
 
