@@ -19401,6 +19401,8 @@ static int mac80211_he_ltf_mapping(struct sigma_dut *dut,
 static int mac80211_he_gi_mapping(struct sigma_dut *dut,
 				  const char *val)
 {
+	if (!val)
+		return -1;
 	if (strcmp(val, "0.8") == 0)
 		return 9;
 	if (strcmp(val, "1.6") == 0)
