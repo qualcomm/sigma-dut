@@ -136,7 +136,8 @@ int fwtest_cmd_wrapper(struct sigma_dut *dut, const char *arg,
 {
 	int ret = -1;
 
-	if (strncmp(dut->device_driver, "ath11k", 6) == 0)
+	if (strncmp(dut->device_driver, "ath11k", 6) == 0 ||
+	    strncmp(dut->device_driver, "ath12k", 6) == 0)
 		ret = run_system_wrapper(dut, "ath11k-fwtest -i %s %s",
 					 ifname, arg);
 
