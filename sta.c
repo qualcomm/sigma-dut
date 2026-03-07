@@ -2402,6 +2402,11 @@ static int set_wpa_common(struct sigma_dut *dut, struct sigma_conn *conn,
 	    set_network(ifname, id, "ocv", "1") < 0)
 		return ERROR_SEND_STATUS;
 
+	val = get_param(cmd, "PMKSACachingPrivacy");
+	if (val && set_network(ifname, id, "pmksa_privacy",
+			       get_enable_disable(val) ? "1" : "0") < 0)
+		return ERROR_SEND_STATUS;
+
 	return id;
 }
 
