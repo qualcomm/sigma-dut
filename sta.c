@@ -17767,6 +17767,153 @@ fail:
 }
 
 
+static int
+sta_chan_unavailability_request(struct sigma_dut *dut, struct sigma_conn *conn,
+				const char *intf, struct sigma_cmd *cmd)
+{
+#ifdef NL80211_SUPPORT
+	struct nlattr *params;
+	struct nlattr *attr;
+	int ifindex, ret;
+	struct nl_msg *msg;
+	const char *val;
+
+	ifindex = if_nametoindex(intf);
+	if (ifindex == 0) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: Index for interface %s failed",
+				__func__, intf);
+		return -1;
+	}
+
+	msg = nl80211_drv_msg(dut, dut->nl_ctx, ifindex, 0,
+			      NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_CHAN_USAGE_REQ))
+		goto fail;
+
+	attr = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!attr ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_CHAN_USAGE_REQ_MODE,
+		       QCA_CHAN_USAGE_MODE_UNAVAILABILITY_INDICATION))
+		goto fail;
+
+	/* Nest unavailability config params */
+	params = nla_nest_start(msg,
+				QCA_WLAN_VENDOR_ATTR_CHAN_USAGE_REQ_UNAVAILABILITY_CONFIG_PARAMS);
+	if (!params)
+		goto fail;
+
+	val = get_param(cmd, "DestMAC");
+	if (val) {
+		unsigned char mac_addr[ETH_ALEN];
+
+		if (parse_mac_address(dut, val, mac_addr) ||
+		    nla_put(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MAC_ADDR,
+			    ETH_ALEN, mac_addr))
+			goto fail;
+	}
+
+	/* Add TWT setup attributes for unavailability indication */
+	val = get_param(cmd, "RespPMMode");
+	if (val &&
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_RESPONDER_PM_MODE,
+		       atoi(val)))
+		goto fail;
+
+	val = get_param(cmd, "TWT_Setup");
+	if (val) {
+		int req_type;
+
+		if (strcasecmp(val, "request") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_REQUEST;
+		} else if (strcasecmp(val, "suggest") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_SUGGEST;
+		} else if (strcasecmp(val, "demand") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_DEMAND;
+		} else if (strcasecmp(val, "grouping") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_TWT_GROUPING;
+		} else if (strcasecmp(val, "accept") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_ACCEPT_TWT;
+		} else if (strcasecmp(val, "alternate") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_ALTERNATE_TWT;
+		} else if (strcasecmp(val, "dictate") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_DICTATE_TWT;
+		} else if (strcasecmp(val, "reject") == 0) {
+			req_type = QCA_WLAN_VENDOR_TWT_SETUP_REJECT_TWT;
+		} else {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Unsupported TWT_Setup=%s", val);
+			goto fail;
+		}
+
+		if (nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_REQ_TYPE,
+			       req_type))
+			goto fail;
+	}
+
+	val = get_param(cmd, "Trigger");
+	if (val && atoi(val) == 1) {
+		if (nla_put_flag(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_TRIGGER))
+			goto fail;
+	}
+
+	val = get_param(cmd, "FlowType");
+	if (val &&
+	    nla_put_u8(msg,
+		       QCA_WLAN_VENDOR_ATTR_TWT_SETUP_FLOW_TYPE, atoi(val)))
+		goto fail;
+
+	val = get_param(cmd, "WakeIntervalExp");
+	if (val &&
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_EXP,
+		       atoi(val)))
+		goto fail;
+
+	val = get_param(cmd, "Protection");
+	if (val && atoi(val) == 1) {
+		if (nla_put_flag(msg,
+				 QCA_WLAN_VENDOR_ATTR_TWT_SETUP_PROTECTION))
+			goto fail;
+	}
+
+	val = get_param(cmd, "NominalMinWakeDur");
+	if (val &&
+	    nla_put_u32(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_DURATION,
+			atoi(val)))
+		goto fail;
+
+	val = get_param(cmd, "WakeIntervalMantissa");
+	if (val &&
+	    nla_put_u32(msg, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_MANTISSA,
+			atoi(val)))
+		goto fail;
+
+	nla_nest_end(msg, params);
+	nla_nest_end(msg, attr);
+
+	ret = send_and_recv_msgs(dut, dut->nl_ctx, msg, NULL, NULL);
+	if (ret) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: err in send_and_recv_msgs, ret=%d",
+				__func__, ret);
+		return -1;
+	}
+	return 0;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+#else /* NL80211_SUPPORT */
+	sigma_dut_print(dut, DUT_MSG_ERROR,
+			"Channel unavailability request cannot be sent without NL80211_SUPPORT defined");
+	return -1;
+#endif /* NL80211_SUPPORT */
+}
+
+
 static enum sigma_cmd_result
 cmd_sta_send_frame_p2p_cur(struct sigma_dut *dut, struct sigma_conn *conn,
 			   const char *intf, struct sigma_cmd *cmd)
@@ -17775,21 +17922,24 @@ cmd_sta_send_frame_p2p_cur(struct sigma_dut *dut, struct sigma_conn *conn,
 	const char *ifname;
 
 	val = get_param(cmd, "UsageMode");
-	if (val) {
-		if (atoi(val) == 4)
-			return sta_chan_switch_request(dut, conn, intf, cmd);
+	if (!val)
+		return INVALID_SEND_STATUS;
 
-		if (atoi(val) == 3) {
-			ifname = get_p2p_group_ifname(dut, intf);
+	if (atoi(val) == 4)
+		return sta_chan_switch_request(dut, conn, intf, cmd);
+
+	if (atoi(val) == 3) {
+		ifname = get_p2p_group_ifname(dut, intf);
+		if (sta_chan_unavailability_request(dut, conn, ifname, cmd)) {
+			/* Fallback to iwpriv */
 			if (run_iwpriv(dut, ifname,
 				       "setUnitTestCmd 77 2 4 0x0016") < 0) {
 				send_resp(dut, conn, SIGMA_ERROR,
 					  "ErrorCode,Failed to run iwpriv");
 				return STATUS_SENT_ERROR;
 			}
-
-			return SUCCESS_SEND_STATUS;
 		}
+		return SUCCESS_SEND_STATUS;
 	}
 
 	return INVALID_SEND_STATUS;
