@@ -1177,7 +1177,9 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 
 	val = get_param(cmd, "Interface");
 	if (val) {
-		if (strcasecmp(val, "5G") == 0) {
+		if (strcasecmp(val, "5G") == 0 ||
+		    strcasecmp(val, "5.0G") == 0 ||
+		    strcasecmp(val, "5.0") == 0) {
 			dut->ap_interface_5g = 1;
 			dut->ap_band = AP_BAND_5GHz;
 			if (dut->ap_mode == AP_11be) {
@@ -1194,7 +1196,9 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 						treat_6ghz_as_5ghz = true;
 				}
 			}
-		} else if (strcasecmp(val, "24G") == 0) {
+		} else if (strcasecmp(val, "24G") == 0 ||
+			   strcasecmp(val, "2.4G") == 0 ||
+			   strcasecmp(val, "2.4") == 0) {
 			dut->ap_interface_2g = 1;
 			dut->ap_band = AP_BAND_24GHz;
 			if (dut->ap_mode == AP_11be) {
@@ -1213,9 +1217,12 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 				mlo_config_band = AP_BAND_6GHz;
 			}
 		} else {
-			send_resp(dut, conn, SIGMA_INVALID,
-				  "errorCode,Invalid Interface");
-			return STATUS_SENT;
+			/* Ignore interface names (e.g. wlan0) that are not band
+			 * designators; ap_set_wireless uses get_main_ifname()
+			 * and does not need an explicit interface name here. */
+			sigma_dut_print(dut, DUT_MSG_DEBUG,
+					"ap_set_wireless: ignoring non-band Interface value '%s'",
+					val);
 		}
 
 		if (dut->ap_mode != AP_11be &&
