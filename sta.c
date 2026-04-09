@@ -6842,6 +6842,10 @@ static int wcn_sta_set_sp_stream(struct sigma_dut *dut, const char *intf,
 		sta_nss = 1;
 	} else if (strcmp(val, "2SS") == 0 || strcmp(val, "2") == 0) {
 		sta_nss = 2;
+	} else if (strcmp(val, "3SS") == 0 || strcmp(val, "3") == 0) {
+		sta_nss = 3;
+	} else if (strcmp(val, "4SS") == 0 || strcmp(val, "4") == 0) {
+		sta_nss = 4;
 	} else {
 		sigma_dut_print(dut, DUT_MSG_ERROR,
 				"SP_STREAM value not supported");
