@@ -15391,6 +15391,8 @@ static int cmd_sta_send_frame_arpreply(struct sigma_dut *dut,
 	val = get_param(cmd, "dest");
 	if (val)
 		hwaddr_aton(val, (unsigned char *) dst);
+	else
+		return -2;
 
 	val = get_param(cmd, "DestIP");
 	if (val)
