@@ -197,7 +197,7 @@ static void * process_dhcp_ack(void *ptr)
 				"OP: %d, your_ip: %s, netmask: %s, router: %s",
 				dhcp->op, your_ip, mask, router);
 		/* set ip configuration */
-		if (!set_ipv4_addr(dut, ifname, your_ip, mask)) {
+		if (run_ipv4_addr(dut, ifname, your_ip, mask) != 0) {
 			sigma_dut_print(dut, DUT_MSG_ERROR,
 					"Failed to set IP address");
 			continue;

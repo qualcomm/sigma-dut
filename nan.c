@@ -609,7 +609,7 @@ int sigma_nan_enable(struct sigma_dut *dut, struct sigma_conn *conn,
 	}
 
 	if (if_nametoindex(NAN_AWARE_IFACE))
-		run_system_wrapper(dut, "ifconfig %s up", NAN_AWARE_IFACE);
+		run_if_up(dut, NAN_AWARE_IFACE);
 
 	nan_enable_request(0, dut->wifi_hal_iface_handle, &req);
 
@@ -2995,8 +2995,7 @@ void nan_event_disabled(NanDisabledInd *event)
 			__func__, event->reason);
 	/* pthread_cond_signal(&gCondition); */
 	if (if_nametoindex(NAN_AWARE_IFACE))
-		run_system_wrapper(global_dut, "ifconfig %s down",
-				   NAN_AWARE_IFACE);
+		run_if_down(global_dut, NAN_AWARE_IFACE);
 }
 
 
@@ -3060,7 +3059,7 @@ static void ndp_event_data_confirm(NanDataPathConfirmInd *event)
 	global_ndp_instance_id = event->ndp_instance_id;
 
 	if (event->rsp_code == NAN_DP_REQUEST_ACCEPT) {
-		if (system("ifconfig nan0 up") != 0) {
+		if (run_if_up(global_dut, "nan0") != 0) {
 			sigma_dut_print(global_dut, DUT_MSG_ERROR,
 					"Failed to set nan interface up");
 			return;
@@ -3205,8 +3204,7 @@ void nan_init(struct sigma_dut *dut)
 				     callbackHandler);
 #ifdef WFA_CERT_NANR4
 		if (if_nametoindex(NAN_AWARE_IFACE))
-			run_system_wrapper(dut, "ifconfig %s up",
-					   NAN_AWARE_IFACE);
+			run_if_up(dut, NAN_AWARE_IFACE);
 
 		nan_get_capabilities(0, dut->wifi_hal_iface_handle);
 #endif /* WFA_CERT_NANR4 */
@@ -3340,7 +3338,7 @@ int nan_cmd_sta_exec_action(struct sigma_dut *dut, struct sigma_conn *conn,
 		size = sizeof(u32) + sizeof(u32);
 
 		if (if_nametoindex(NAN_AWARE_IFACE))
-		    run_system_wrapper(dut, "ifconfig %s up", NAN_AWARE_IFACE);
+			run_if_up(dut, NAN_AWARE_IFACE);
 
 		sigma_dut_print(dut, DUT_MSG_INFO,
 				"%s: Device Type: cmd type = %d and command data = %u",

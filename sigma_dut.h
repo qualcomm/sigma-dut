@@ -618,6 +618,12 @@ enum ap_band {
 	AP_BAND_MAX,
 };
 
+enum sigma_cmd_avail {
+	SIGMA_CMD_UNKNOWN,
+	SIGMA_CMD_NO,
+	SIGMA_CMD_YES,
+};
+
 struct sigma_dut {
 	const char *main_ifname;
 	char *main_ifname_2g;
@@ -1351,6 +1357,8 @@ struct sigma_dut {
 	char *sta_bssid_pool;
 	struct p2p_r2_connect_info p2p_connect_info;
 	pthread_t p2p_event_mon_thread;
+	enum sigma_cmd_avail ifconfig_avail;
+	enum sigma_cmd_avail ip_avail;
 };
 
 
@@ -1483,8 +1491,6 @@ int sta_set_60g_abft_len(struct sigma_dut *dut, struct sigma_conn *conn,
 int wil6210_send_frame_60g(struct sigma_dut *dut, struct sigma_conn *conn,
 			   struct sigma_cmd *cmd);
 int hwaddr_aton(const char *txt, unsigned char *addr);
-int set_ipv4_addr(struct sigma_dut *dut, const char *ifname,
-		  const char *ip, const char *mask);
 int set_ipv4_gw(struct sigma_dut *dut, const char *gw);
 int send_addba_60g(struct sigma_dut *dut, struct sigma_conn *conn,
 		   struct sigma_cmd *cmd, const char *param);
@@ -1549,6 +1555,14 @@ void convert_mac_addr_to_ipv6_lladdr(u8 *mac_addr, char *ipv6_buf,
 				     size_t buf_len);
 size_t convert_mac_addr_to_ipv6_linklocal(const u8 *mac_addr, u8 *ipv6);
 int snprintf_error(size_t size, int res);
+
+int run_if_up(struct sigma_dut *dut, const char *ifname);
+int run_if_down(struct sigma_dut *dut, const char *ifname);
+int run_if_mtu(struct sigma_dut *dut, const char *ifname, int mtu);
+int run_ipv4_addr(struct sigma_dut *dut, const char *ifname,
+		  const char *ipaddr, const char *netmask);
+int run_append_hwaddr(struct sigma_dut *dut, const char *ifname,
+		      const char *outfile);
 
 #ifndef ANDROID
 size_t strlcpy(char *dest, const char *src, size_t siz);

@@ -121,9 +121,7 @@ void start_dhcp(struct sigma_dut *dut, const char *group_ifname, int go)
 	char buf[200];
 
 	if (go) {
-		snprintf(buf, sizeof(buf), "ifconfig %s %s", group_ifname,
-			 GO_IP_ADDR);
-		run_system(dut, buf);
+		run_ipv4_addr(dut, group_ifname, GO_IP_ADDR, "255.255.255.0");
 #ifdef ANDROID
 		snprintf(buf, sizeof(buf),
 			 "/system/bin/dnsmasq -x /data/dnsmasq.pid --no-resolv --no-poll --dhcp-range=%s,%s,1h",
@@ -209,10 +207,9 @@ void stop_dhcp(struct sigma_dut *dut, const char *group_ifname, int go)
 
 	snprintf(buf, sizeof(buf), "ip address flush dev %s", group_ifname);
 	run_system(dut, buf);
-	snprintf(buf, sizeof(buf), "ifconfig %s %s",
-		 group_ifname, FLUSH_IP_ADDR);
-	sigma_dut_print(dut, DUT_MSG_DEBUG, "Clear IP address: %s", buf);
-	run_system(dut, buf);
+	sigma_dut_print(dut, DUT_MSG_DEBUG, "Clear %s IP address",
+			group_ifname);
+	run_ipv4_addr(dut, group_ifname, FLUSH_IP_ADDR, "255.255.255.0");
 #endif /* __linux__ */
 }
 
@@ -661,12 +658,12 @@ void disconnect_station(struct sigma_dut *dut)
 			run_system(dut, buf);
 			unlink(path);
 		}
-		snprintf(buf, sizeof(buf),
-			 "ifconfig %s 0.0.0.0", get_station_ifname(dut));
+
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
-				"Clear infrastructure station IP address: %s",
-				buf);
-		run_system(dut, buf);
+				"Clear infrastructure station %s IP address",
+				get_station_ifname(dut));
+		run_ipv4_addr(dut, get_station_ifname(dut), "0.0.0.0",
+			      "255.255.255.0");
    }
 #endif /* __linux__ */
 }

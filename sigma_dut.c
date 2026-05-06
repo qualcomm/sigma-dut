@@ -892,6 +892,8 @@ static void set_defaults(struct sigma_dut *dut)
 	dut->autoconnect_default = 1;
 	set_host_name(dut);
 	dut->pasn_type = 0xf;
+	dut->ifconfig_avail = SIGMA_CMD_UNKNOWN;
+	dut->ip_avail = SIGMA_CMD_UNKNOWN;
 }
 
 

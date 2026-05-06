@@ -1422,17 +1422,6 @@ static int clear_ip_addr(struct sigma_dut *dut, const char *ifname)
 }
 
 
-int set_ipv4_addr(struct sigma_dut *dut, const char *ifname,
-		  const char *ip, const char *mask)
-{
-	char buf[200];
-
-	snprintf(buf, sizeof(buf), "ifconfig %s %s netmask %s",
-		 ifname, ip, mask);
-	return system(buf) == 0;
-}
-
-
 int set_ipv4_gw(struct sigma_dut *dut, const char *gw)
 {
 	char buf[200];
@@ -1630,7 +1619,7 @@ static enum sigma_cmd_result cmd_sta_set_ip_config(struct sigma_dut *dut,
 	kill_dhcp_client(dut, ifname);
 
 	if (!dut->no_ip_addr_set) {
-		if (!set_ipv4_addr(dut, ifname, ip, mask)) {
+		if (run_ipv4_addr(dut, ifname, ip, mask) != 0) {
 			send_resp(dut, conn, SIGMA_ERROR,
 				  "ErrorCode,Failed to set IP address");
 			return 0;
@@ -8901,7 +8890,6 @@ static int sta_set_60g_common(struct sigma_dut *dut, struct sigma_conn *conn,
 			      struct sigma_cmd *cmd)
 {
 	const char *val;
-	char buf[100];
 
 	val = get_param(cmd, "MSDUSize");
 	if (val) {
@@ -8922,12 +8910,10 @@ static int sta_set_60g_common(struct sigma_dut *dut, struct sigma_conn *conn,
 		mtu = dut->amsdu_size - IEEE80211_SNAP_LEN_DMG;
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
 				"Setting amsdu_size to %d", mtu);
-		snprintf(buf, sizeof(buf), "ifconfig %s mtu %d",
-			 get_station_ifname(dut), mtu);
-
-		if (system(buf) != 0) {
-			sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set %s",
-					buf);
+		if (run_if_mtu(dut, get_station_ifname(dut), mtu) != 0) {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Failed to set amsdu_size (MTU) %d",
+					mtu);
 			return ERROR_SEND_STATUS;
 		}
 	}
@@ -11701,7 +11687,6 @@ static enum sigma_cmd_result cmd_sta_reset_default(struct sigma_dut *dut,
 
 	if (is_60g_sigma_dut(dut)) {
 		const char *dev_role = get_param(cmd, "DevRole");
-		char buf[256];
 
 		sigma_dut_print(dut, DUT_MSG_INFO,
 				"WPS 60 GHz program, wps_disable = %d",
@@ -11733,12 +11718,9 @@ static enum sigma_cmd_result cmd_sta_reset_default(struct sigma_dut *dut,
 
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
 				"Setting msdu_size to MAX: 7912");
-		snprintf(buf, sizeof(buf), "ifconfig %s mtu 7912",
-			 get_station_ifname(dut));
-
-		if (system(buf) != 0) {
-			sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set %s",
-					buf);
+		if (run_if_mtu(dut, get_station_ifname(dut), 7912) != 0) {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Failed to set msdu_size (MTU) 7912");
 			return ERROR_SEND_STATUS;
 		}
 
@@ -14249,10 +14231,7 @@ static void ath_sta_inject_frame(struct sigma_dut *dut, const char *intf,
 	if (system(buf) != 0)
 		return;
 
-	snprintf(buf, sizeof(buf),
-		 "ifconfig %s | grep HWaddr | cut -b 39-56 >> %s",
-		 intf, VI_QOS_TMP_FILE);
-	if (system(buf) != 0)
+	if (run_append_hwaddr(dut, intf, VI_QOS_TMP_FILE) != 0)
 		sigma_dut_print(dut, DUT_MSG_ERROR, "HWaddr matching failed");
 
 	snprintf(buf,sizeof(buf), "sed -n '3,$p' %s >> %s",
@@ -15463,7 +15442,7 @@ static int cmd_sta_send_frame_hs2_dls_req(struct sigma_dut *dut,
 		}
 	}
 
-	if (system("ifconfig sigmadut up") != 0) {
+	if (run_if_up(dut, "sigmadut") != 0) {
 		sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set "
 				"monitor interface up");
 		return -2;
@@ -18339,7 +18318,7 @@ enum sigma_cmd_result cmd_sta_send_frame(struct sigma_dut *dut,
 		}
 	}
 
-	if (system("ifconfig sigmadut up") != 0) {
+	if (run_if_up(dut, "sigmadut") != 0) {
 		sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set "
 				"monitor interface up");
 		return -2;

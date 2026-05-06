@@ -1102,7 +1102,6 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 	const char *val;
 	unsigned int wlan_tag = 1;
 	const char *ifname = get_main_ifname(dut);
-	char buf[128];
 	int subeamformermode = 0;
 	int mlo_config_band = -1;
 
@@ -2309,12 +2308,10 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 		mtu = dut->amsdu_size - IEEE80211_SNAP_LEN_DMG;
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
 				"Setting amsdu_size to %d", mtu);
-		snprintf(buf, sizeof(buf), "ifconfig %s mtu %d",
-			 get_station_ifname(dut), mtu);
 
-		if (system(buf) != 0) {
-			sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set %s",
-					buf);
+		if (run_if_mtu(dut, get_station_ifname(dut), mtu) != 0) {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Failed to set amsdu_size: %d", mtu);
 			return ERROR_SEND_STATUS;
 		}
 	}
@@ -2707,10 +2704,7 @@ static void ath_inject_frame(struct sigma_dut *dut, const char *ifname, int tid)
 	if (system(buf) != 0)
 		return;
 
-	snprintf(buf, sizeof(buf),
-		 "ifconfig %s | grep HWaddr | cut -b 39-56 >> %s",
-		 ifname, VI_QOS_TMP_FILE);
-	if (system(buf) != 0)
+	if (run_append_hwaddr(dut, ifname, VI_QOS_TMP_FILE) != 0)
 		sigma_dut_print(dut, DUT_MSG_ERROR, "Retrieve HWaddr failed");
 
 	snprintf(buf, sizeof(buf), "sed -n '3,$p' %s >> %s",
@@ -5887,11 +5881,17 @@ static int cmd_wcn_ap_config_commit(struct sigma_dut *dut,
 
 	sigma_dut_print(dut, DUT_MSG_INFO, "setting ip addr %s mask %s",
 			ap_inet_addr, ap_inet_mask);
-	snprintf(buf, sizeof(buf), "ifconfig %s %s netmask %s up",
-		 get_main_ifname(dut), ap_inet_addr, ap_inet_mask);
-	if (system(buf) != 0) {
+
+	if (run_ipv4_addr(dut, get_main_ifname(dut), ap_inet_addr,
+			  ap_inet_mask) != 0) {
 		sigma_dut_print(dut, DUT_MSG_ERROR,
 				"Failed to intialize the interface");
+		return -1;
+	}
+
+	if (run_if_up(dut, get_main_ifname(dut)) != 0) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"Failed to set %s up", get_main_ifname(dut));
 		return -1;
 	}
 
@@ -9080,11 +9080,10 @@ enum sigma_cmd_result cmd_ap_config_commit(struct sigma_dut *dut,
 	}
 
 	if (dut->mode == SIGMA_MODE_SNIFFER && dut->sniffer_ifname) {
-		snprintf(buf, sizeof(buf), "ifconfig %s down",
-			 dut->sniffer_ifname);
-		if (system(buf) != 0) {
+		if (run_if_down(dut, dut->sniffer_ifname) != 0) {
 			sigma_dut_print(dut, DUT_MSG_INFO,
-					"Failed to run '%s'", buf);
+					"Failed to set sniffer interface %s down",
+					dut->sniffer_ifname);
 		}
 		snprintf(buf, sizeof(buf), "iw dev %s set type station",
 			 dut->sniffer_ifname);
@@ -10506,11 +10505,17 @@ skip_vht_parameters_set:
 		sigma_dut_print(dut, DUT_MSG_INFO,
 				"setting ip addr %s mask %s ifname %s",
 				ap_inet_addr, ap_inet_mask, ifname_ptr);
-		snprintf(buf, sizeof(buf), "ifconfig %s %s netmask %s up",
-			 ifname_ptr, ap_inet_addr, ap_inet_mask);
-		if (system(buf) != 0) {
+
+		if (run_ipv4_addr(dut, ifname_ptr, ap_inet_addr,
+				  ap_inet_mask) != 0) {
 			sigma_dut_print(dut, DUT_MSG_ERROR,
 					"Failed to initialize the interface");
+			return -1;
+		}
+
+		if (run_if_up(dut, ifname_ptr) != 0) {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Failed to set %s up", ifname_ptr);
 			return -1;
 		}
 	}
@@ -10638,8 +10643,7 @@ skip_vht_parameters_set:
 		fwtest_set_he_params(dut, ifname);
 
 	if (dut->bridge && dut->ap_is_dual) {
-		if (run_system_wrapper(dut, "ifconfig %s up", dut->bridge)
-		    != 0) {
+		if (run_if_up(dut, dut->bridge) != 0) {
 			sigma_dut_print(dut, DUT_MSG_ERROR,
 					"Failed to set bridge interface up");
 			return -1;
@@ -11163,7 +11167,6 @@ static enum sigma_cmd_result cmd_ap_reset_default(struct sigma_dut *dut,
 {
 	const char *type, *program;
 	enum driver_type drv;
-	char buf[128];
 	int i;
 	const char *ifname;
 	char ifname2[50];
@@ -11633,12 +11636,10 @@ static enum sigma_cmd_result cmd_ap_reset_default(struct sigma_dut *dut,
 
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
 				"Setting msdu_size to MAX: 7912");
-		snprintf(buf, sizeof(buf), "ifconfig %s mtu 7912",
-			 get_main_ifname(dut));
 
-		if (system(buf) != 0) {
-			sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set %s",
-					buf);
+		if (run_if_mtu(dut, get_main_ifname(dut), 7912) != 0) {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Failed to set MTU for msdu_size 7912");
 			return ERROR_SEND_STATUS;
 		}
 
@@ -11940,7 +11941,7 @@ static int ap_inject_frame(struct sigma_dut *dut, struct sigma_conn *conn,
 		}
 	}
 
-	if (system("ifconfig sigmadut up") != 0) {
+	if (run_if_up(dut, "sigmadut") != 0) {
 		sigma_dut_print(dut, DUT_MSG_ERROR, "Failed to set "
 				"monitor interface up");
 		return -2;
@@ -12616,9 +12617,9 @@ static int ath_ap_send_frame_btm_req(struct sigma_dut *dut,
 			   mac_addr[0], mac_addr[1], mac_addr[2],
 			   mac_addr[3], mac_addr[4], mac_addr[5]);
 		inform_and_sleep(dut, 2);
-		run_system_wrapper(dut, "ifconfig %s down", ifname);
+		run_if_down(dut, ifname);
 		inform_and_sleep(dut, 5);
-		run_system_wrapper(dut, "ifconfig %s up", ifname);
+		run_if_up(dut, ifname);
 	} else if (dut->ap_btmreq_disassoc_imnt) {
 		inform_and_sleep(dut, (disassoc_timer / 1000) + 1);
 		run_iwpriv(dut, ifname, "kickmac %02x:%02x:%02x:%02x:%02x:%02x",

@@ -225,11 +225,10 @@ enum sigma_cmd_result cmd_wlantest_set_channel(struct sigma_dut *dut,
 	snprintf(buf, sizeof(buf), "iw dev %s set type monitor",
 		 dut->sniffer_ifname);
 	if (system(buf) != 0) {
-		snprintf(buf, sizeof(buf), "ifconfig %s down",
-			 dut->sniffer_ifname);
-		if (system(buf) != 0) {
+		if (run_if_down(dut, dut->sniffer_ifname) != 0) {
 			sigma_dut_print(dut, DUT_MSG_INFO,
-					"Failed to run '%s'", buf);
+					"Failed to set %s down",
+					dut->sniffer_ifname);
 			return -2;
 		}
 
@@ -249,9 +248,9 @@ enum sigma_cmd_result cmd_wlantest_set_channel(struct sigma_dut *dut,
 		return -2;
 	}
 
-	snprintf(buf, sizeof(buf), "ifconfig %s up", dut->sniffer_ifname);
-	if (system(buf) != 0) {
-		sigma_dut_print(dut, DUT_MSG_INFO, "Failed to run '%s'", buf);
+	if (run_if_up(dut, dut->sniffer_ifname) != 0) {
+		sigma_dut_print(dut, DUT_MSG_INFO, "Failed to set %s up",
+				dut->sniffer_ifname);
 		return -2;
 	}
 

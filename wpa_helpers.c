@@ -103,13 +103,10 @@ const char * get_p2p_ifname(struct sigma_dut *dut, const char *primary_ifname)
 
 void dut_ifc_reset(struct sigma_dut *dut)
 {
-	char buf[256];
 	const char *ifc = get_station_ifname(dut);
 
-	snprintf(buf, sizeof(buf), "ifconfig %s down", ifc);
-	run_system(dut, buf);
-	snprintf(buf, sizeof(buf), "ifconfig %s up", ifc);
-	run_system(dut, buf);
+	run_if_down(dut, ifc);
+	run_if_up(dut, ifc);
 }
 
 
@@ -978,11 +975,10 @@ int start_sta_mode(struct sigma_dut *dut)
 	}
 
 	if (dut->mode == SIGMA_MODE_SNIFFER && dut->sniffer_ifname) {
-		snprintf(buf, sizeof(buf), "ifconfig %s down",
-			 dut->sniffer_ifname);
-		if (system(buf) != 0) {
+		if (run_if_down(dut, dut->sniffer_ifname) != 0) {
 			sigma_dut_print(dut, DUT_MSG_INFO,
-					"Failed to run '%s'", buf);
+					"Failed to set %s down",
+					dut->sniffer_ifname);
 		}
 		snprintf(buf, sizeof(buf), "iw dev %s set type station",
 			 dut->sniffer_ifname);

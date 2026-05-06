@@ -12,6 +12,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <limits.h>
 #include "wpa_helpers.h"
 
 enum driver_type wifi_chip_type = DRIVER_NOT_SET;
@@ -1542,4 +1543,139 @@ u16 get_link_id_bitmask(const char *param)
 	}
 
 	return bitmask;
+}
+
+
+static enum sigma_cmd_avail cmd_in_path(const char *cmd)
+{
+	const char *path = getenv("PATH");
+	char *dup, *saveptr, *dir;
+	char full[PATH_MAX];
+
+	if (!cmd || !*cmd)
+		return SIGMA_CMD_NO;
+
+	if (!path || !*path)
+		return SIGMA_CMD_NO;
+
+	dup = strdup(path);
+	if (!dup)
+		return SIGMA_CMD_NO;
+
+	for (dir = strtok_r(dup, ":", &saveptr); dir;
+	     dir = strtok_r(NULL, ":", &saveptr)) {
+		/* Empty path entry means current directory */
+		if (*dir == '\0')
+			dir = ".";
+
+		snprintf(full, sizeof(full), "%s/%s", dir, cmd);
+		if (access(full, X_OK) == 0) {
+			free(dup);
+			return SIGMA_CMD_YES;
+		}
+	}
+
+	free(dup);
+
+	return SIGMA_CMD_NO;
+}
+
+
+static bool dut_has_ifconfig(struct sigma_dut *dut)
+{
+	if (dut->ifconfig_avail == SIGMA_CMD_UNKNOWN)
+		dut->ifconfig_avail = cmd_in_path("ifconfig");
+
+	return dut->ifconfig_avail == SIGMA_CMD_YES;
+}
+
+
+static bool dut_has_ip(struct sigma_dut *dut)
+{
+	if (dut->ip_avail == SIGMA_CMD_UNKNOWN)
+		dut->ip_avail = cmd_in_path("ip");
+
+	return dut->ip_avail == SIGMA_CMD_YES;
+}
+
+
+int run_if_up(struct sigma_dut *dut, const char *ifname)
+{
+	char cmd[128];
+
+	if (!dut_has_ifconfig(dut) && dut_has_ip(dut))
+		snprintf(cmd, sizeof(cmd), "ip link set %s up", ifname);
+	else
+		snprintf(cmd, sizeof(cmd), "ifconfig %s up", ifname);
+	return run_system(dut, cmd);
+}
+
+
+int run_if_down(struct sigma_dut *dut, const char *ifname)
+{
+	char cmd[128];
+
+	if (!dut_has_ifconfig(dut) && dut_has_ip(dut))
+		snprintf(cmd, sizeof(cmd), "ip link set %s down", ifname);
+	else
+		snprintf(cmd, sizeof(cmd), "ifconfig %s down", ifname);
+	return run_system(dut, cmd);
+}
+
+
+int run_if_mtu(struct sigma_dut *dut, const char *ifname, int mtu)
+{
+	char cmd[128];
+
+	if (!dut_has_ifconfig(dut) && dut_has_ip(dut))
+		snprintf(cmd, sizeof(cmd), "ip link set %s mtu %d", ifname,
+			 mtu);
+	else
+		snprintf(cmd, sizeof(cmd), "ifconfig %s mtu %d", ifname, mtu);
+	return run_system(dut, cmd);
+}
+
+
+int run_ipv4_addr(struct sigma_dut *dut, const char *ifname,
+		  const char *ipaddr, const char *netmask)
+{
+	char cmd[256];
+	int zero_addr = strncmp(ipaddr, "0.0.0.0", 7) == 0;
+
+	if (!dut_has_ifconfig(dut) && dut_has_ip(dut)) {
+		snprintf(cmd, sizeof(cmd), "ip addr flush dev %s", ifname);
+
+		if (zero_addr)
+			return run_system(dut, cmd);
+
+		/* Force ip addr flush before update new ip addr. */
+		run_system(dut, cmd);
+		snprintf(cmd, sizeof(cmd), "ip addr add %s/%s dev %s",
+			 ipaddr, netmask, ifname);
+		return run_system(dut, cmd);
+	}
+
+	if (zero_addr)
+		snprintf(cmd, sizeof(cmd), "ifconfig %s %s", ifname, ipaddr);
+	else
+		snprintf(cmd, sizeof(cmd), "ifconfig %s %s netmask %s",
+			 ifname, ipaddr, netmask);
+	return run_system(dut, cmd);
+}
+
+
+int run_append_hwaddr(struct sigma_dut *dut, const char *ifname,
+		      const char *outfile)
+{
+    char cmd[256];
+
+    if (!dut_has_ifconfig(dut) && dut_has_ip(dut))
+	    snprintf(cmd, sizeof(cmd),
+		     "ip link show dev %s |grep ether |cut -b 16-32 >> %s",
+		     ifname, outfile);
+    else
+	    snprintf(cmd, sizeof(cmd),
+		     "ifconfig %s | grep HWaddr | cut -b 39-56 >> %s",
+		     ifname, outfile);
+    return run_system(dut, cmd);
 }
