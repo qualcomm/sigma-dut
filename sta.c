@@ -9,6 +9,7 @@
  */
 
 #include "sigma_dut.h"
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -20063,6 +20064,192 @@ static enum sigma_cmd_result mac80211_coding_type(struct sigma_dut *dut,
 
 
 static enum sigma_cmd_result
+mac80211_sta_get_active_links_bitmask_by_mac(struct sigma_dut *dut,
+					     struct sigma_conn *conn,
+					     const char *intf,
+					     const char *link_mac_str,
+					     int *active_bitmask)
+{
+	char link_id_str[8];
+	int link_id, all_links;
+	char *token, *saveptr, *mac_str_copy;
+
+	sigma_dut_print(dut, DUT_MSG_DEBUG, "%s: intf=%s link_mac_str=%s",
+			__func__, intf, link_mac_str);
+
+	all_links = get_connected_mlo_link_ids(dut, intf);
+	if (!all_links) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: no connected MLO links found", __func__);
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,No connected MLO links");
+		return STATUS_SENT_ERROR;
+	}
+
+	*active_bitmask = 0;
+	mac_str_copy = strdup(link_mac_str);
+	if (!mac_str_copy)
+		return ERROR_SEND_STATUS;
+
+	token = strtok_r(mac_str_copy, " ", &saveptr);
+	while (token) {
+		if (get_mlo_link_id_link_mac(dut, intf, token,
+					     link_id_str,
+					     sizeof(link_id_str)) == 0) {
+			link_id = atoi(link_id_str);
+			if (link_id < 0 || link_id >= 32) {
+				sigma_dut_print(dut, DUT_MSG_ERROR,
+						"%s: invalid link_id %d for MAC %s",
+						__func__, link_id, token);
+				token = strtok_r(NULL, " ", &saveptr);
+				continue;
+			}
+			*active_bitmask |= (1 << link_id);
+			sigma_dut_print(dut, DUT_MSG_DEBUG,
+					"%s: MAC %s -> link_id %d",
+					__func__, token, link_id);
+		} else {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"%s: link_id not found for MAC %s",
+					__func__, token);
+		}
+		token = strtok_r(NULL, " ", &saveptr);
+	}
+	free(mac_str_copy);
+
+	if (!*active_bitmask) {
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Could not resolve any link ID from MAC");
+		return STATUS_SENT_ERROR;
+	}
+
+	/* Mask against actually connected links to be safe */
+	*active_bitmask &= all_links;
+	if (!*active_bitmask) {
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Active bitmask has no overlap with connected links");
+		return STATUS_SENT_ERROR;
+	}
+
+	return SUCCESS_SEND_STATUS;
+}
+
+
+static enum sigma_cmd_result
+mac80211_sta_apply_active_links(struct sigma_dut *dut,
+				struct sigma_conn *conn,
+				const char *intf,
+				int active_bitmask)
+{
+	char phy_name_path[128], phy_name[64];
+	char debugfs_path[256], bitmask_str[16];
+	ssize_t res;
+	int fd;
+	FILE *f;
+	char *newline;
+
+	res = snprintf(phy_name_path, sizeof(phy_name_path),
+		       "/sys/class/net/%s/phy80211/name", intf);
+	if (res < 0 || res >= (int) sizeof(phy_name_path)) {
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,phy80211 name path too long");
+		return STATUS_SENT_ERROR;
+	}
+
+	f = fopen(phy_name_path, "r");
+	if (!f) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: fopen(%s) failed: %s",
+				__func__, phy_name_path, strerror(errno));
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Failed to read phy name");
+		return STATUS_SENT_ERROR;
+	}
+
+	if (!fgets(phy_name, sizeof(phy_name), f)) {
+		fclose(f);
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: fgets(%s) failed: %s",
+				__func__, phy_name_path, strerror(errno));
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Failed to read phy name");
+		return STATUS_SENT_ERROR;
+	}
+	fclose(f);
+
+	newline = strpbrk(phy_name, "\r\n");
+	if (newline)
+		*newline = '\0';
+	if (!phy_name[0]) {
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Invalid phy name");
+		return STATUS_SENT_ERROR;
+	}
+
+	res = snprintf(debugfs_path, sizeof(debugfs_path),
+		       "/sys/kernel/debug/ieee80211/%s/netdev:%s/active_links",
+		       phy_name, intf);
+	if (res < 0 || res >= (int) sizeof(debugfs_path)) {
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,debugfs path too long");
+		return STATUS_SENT_ERROR;
+	}
+
+	snprintf(bitmask_str, sizeof(bitmask_str), "0x%x", active_bitmask);
+
+	sigma_dut_print(dut, DUT_MSG_DEBUG,
+			"%s: writing '%s' to %s",
+			__func__, bitmask_str, debugfs_path);
+
+	fd = open(debugfs_path, O_WRONLY);
+	if (fd < 0) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: open(%s) failed: %s",
+				__func__, debugfs_path, strerror(errno));
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Failed to open active_links debugfs");
+		return STATUS_SENT_ERROR;
+	}
+
+	res = write(fd, bitmask_str, strlen(bitmask_str));
+	close(fd);
+
+	if (res < 0 || (size_t) res < strlen(bitmask_str)) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"%s: write to %s failed: %s",
+				__func__, debugfs_path, strerror(errno));
+		send_resp(dut, conn, SIGMA_ERROR,
+			  "errorCode,Failed to write active_links debugfs");
+		return STATUS_SENT_ERROR;
+	}
+
+	sigma_dut_print(dut, DUT_MSG_INFO,
+			"%s: active_links set to 0x%x on %s/%s",
+			__func__, active_bitmask, phy_name, intf);
+	return SUCCESS_SEND_STATUS;
+}
+
+
+static enum sigma_cmd_result
+mac80211_sta_set_active_links(struct sigma_dut *dut,
+			      struct sigma_conn *conn,
+			      const char *intf,
+			      const char *link_mac_str)
+{
+	int active_bitmask;
+	enum sigma_cmd_result res;
+
+	res = mac80211_sta_get_active_links_bitmask_by_mac(dut, conn, intf,
+							   link_mac_str,
+							   &active_bitmask);
+	if (res != SUCCESS_SEND_STATUS)
+		return res;
+
+	return mac80211_sta_apply_active_links(dut, conn, intf, active_bitmask);
+}
+
+
+static enum sigma_cmd_result
 mac80211_sta_set_rfeature_he(const char *intf, struct sigma_dut *dut,
 			     struct sigma_conn *conn, struct sigma_cmd *cmd)
 {
@@ -20100,6 +20287,15 @@ mac80211_sta_set_rfeature_he(const char *intf, struct sigma_dut *dut,
 	val = get_param(cmd, "Ch_Pref");
 	if (val && mbo_set_non_pref_ch_list(dut, conn, intf, cmd) == 0)
 		return STATUS_SENT;
+
+	val = get_param(cmd, "ActiveTxMultiLinks");
+	if (val) {
+		enum sigma_cmd_result r;
+
+		r = mac80211_sta_set_active_links(dut, conn, intf, val);
+		if (r != SUCCESS_SEND_STATUS)
+			return r;
+	}
 
 	return SUCCESS_SEND_STATUS;
 }
