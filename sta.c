@@ -1522,7 +1522,7 @@ static void enable_sta_ipv6_configuration(struct sigma_dut *dut,
 					      const char *ifname,
 					      char *buf, size_t buf_size)
 {
-#if (defined(ANDROID) || (defined(__linux__) && !defined(LINUX_EMBEDDED)))
+#if defined(ANDROID) || defined(__linux__)
 	snprintf(buf, buf_size,
 		 "sysctl net.ipv6.conf.%s.disable_ipv6=1",
 		 ifname);
@@ -1539,7 +1539,9 @@ static void enable_sta_ipv6_configuration(struct sigma_dut *dut,
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
 				"Failed to enable IPv6 address");
 	}
-#elif defined(LINUX_EMBEDDED)
+#endif /* ANDROID || __linux__ */
+#ifdef LINUX_EMBEDDED
+	/* Set accept_ra after the disable_ipv6 toggle above */
 	snprintf(buf, buf_size,
 		"echo 2 > /proc/sys/net/ipv6/conf/%s/accept_ra",
 		ifname);
@@ -1548,9 +1550,7 @@ static void enable_sta_ipv6_configuration(struct sigma_dut *dut,
 		sigma_dut_print(dut, DUT_MSG_DEBUG,
 				"Failed to set accept_ra for IPv6 address");
 	}
-#else
-	/* No configuration changes needed */
-#endif
+#endif /* LINUX_EMBEDDED */
 }
 
 
