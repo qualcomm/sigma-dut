@@ -1179,7 +1179,10 @@ static enum sigma_cmd_result cmd_ap_set_wireless(struct sigma_dut *dut,
 
 		free(str);
 	} else if (dut->ap_mode == AP_inval) {
-		if (dut->ap_channel <= 11)
+		const char *ch_val = get_param(cmd, "CHANNEL");
+		int ch = ch_val ? atoi(ch_val) : dut->ap_channel;
+
+		if (ch <= 11)
 			dut->ap_mode = AP_11ng;
 		else if (dut->program == PROGRAM_VHT)
 			dut->ap_mode = AP_11ac;
