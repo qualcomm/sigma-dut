@@ -2,6 +2,7 @@
  * Sigma Control API DUT - Miracast interface
  * Copyright (c) 2017, Qualcomm Atheros, Inc.
  * Copyright (c) 2018-2021, The Linux Foundation
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * All Rights Reserved.
  * Licensed under the Clear BSD license. See README for more details.
  *
@@ -16,10 +17,6 @@
 #include "wpa_ctrl.h"
 #include "wpa_helpers.h"
 #include "miracast.h"
-#ifdef ANDROID
-#include "properties.h"
-#include <netutils/ifc.h>
-#endif /* ANDROID */
 
 #define HUNDRED_SECOND_TIMEOUT   100 /* 100 seconds */
 #define DHCP_LEASE_FILE_PATH "/data/misc/dhcp/dnsmasq.leases"
@@ -28,13 +25,6 @@
 static int session_management_control_port = 7236;
 /* Followingng stores p2p interface name after P2P group formation */
 static char wfd_ifname[32];
-
-extern void get_dhcp_info(uint32_t *ipaddr, uint32_t *gateway,
-			  uint32_t *prefixLength, uint32_t *dns1,
-			  uint32_t *dns2, uint32_t *server,
-			  uint32_t *lease);
-
-extern int do_dhcp(char *);
 
 const char *ipaddr (in_addr_t addr)
 {
@@ -214,42 +204,168 @@ static int get_peer_ip_p2p_go(struct sigma_dut *dut, char *ipaddr,
 
 static int miracast_start_dhcp_client(struct sigma_dut *dut, const char *ifname)
 {
-	int ret = ifc_init();
+	int ret;
 
-	sigma_dut_print(dut, DUT_MSG_DEBUG, "ifc init returned %d", ret);
-	ret = do_dhcp((char *) ifname);
-	sigma_dut_print(dut, DUT_MSG_DEBUG, "do dhcp returned %d", ret);
+	dut->dhcp_client_running = 0;
+	ret = start_dhcp_client(dut, ifname);
+	if (ret < 0 || !dut->dhcp_client_running) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"DHCP client did not start ifname=%s",
+				ifname ? ifname : "(null)");
+		return -1;
+	}
 	return 0;
 }
 
 
 static void miracast_stop_dhcp_client(struct sigma_dut *dut, const char *ifname)
 {
-	ifc_close();
+	const char *group_ifname = ifname ? ifname : "";
+
+	stop_dhcp(dut, group_ifname, 0);
+}
+
+
+static int get_peer_ip_from_arp(struct sigma_dut *dut, char *ip_addr,
+					const char *intf)
+{
+	FILE *arp_fp;
+	char line[256];
+	char fallback_ip[INET_ADDRSTRLEN] = { 0 };
+
+	arp_fp = fopen("/proc/net/arp", "r");
+	if (!arp_fp)
+		return -1;
+
+	/* Skip the ARP table header. */
+	if (!fgets(line, sizeof(line), arp_fp)) {
+		fclose(arp_fp);
+		return -1;
+	}
+
+	while (fgets(line, sizeof(line), arp_fp)) {
+		char arp_ip[INET_ADDRSTRLEN];
+		char arp_hw[32];
+		char arp_iface[IFNAMSIZ + 1];
+		struct in_addr addr;
+		unsigned int flags;
+
+		if (sscanf(line, "%15s %*x 0x%x %31s %*s %16s",
+			   arp_ip, &flags, arp_hw, arp_iface) != 4)
+			continue;
+		if (strcmp(arp_iface, intf) != 0 || !(flags & 0x2))
+			continue;
+		if (inet_pton(AF_INET, arp_ip, &addr) != 1 ||
+		    strcmp(arp_ip, "0.0.0.0") == 0)
+			continue;
+
+		/* Prefer an exact MAC address match, but accept the first valid
+		 * peer entry.
+		 * P2P device and group-interface MACs can differ by a local
+		 * bit. */
+		if (!fallback_ip[0]) {
+			strlcpy(fallback_ip, arp_ip, sizeof(fallback_ip));
+		}
+		if (dut->peer_mac_address[0] &&
+		    strcasecmp(arp_hw, dut->peer_mac_address) != 0)
+			continue;
+
+		strlcpy(ip_addr, arp_ip, IP_ADDR_STR_LEN);
+		fclose(arp_fp);
+		return 0;
+	}
+
+	if (fallback_ip[0]) {
+		strlcpy(ip_addr, fallback_ip, IP_ADDR_STR_LEN);
+		fclose(arp_fp);
+		return 0;
+	}
+
+	fclose(arp_fp);
+	return -1;
+}
+
+
+static bool find_gateway(const char *intf, char *ipAddr)
+{
+	FILE *rt_fp;
+	char rt_line[256];
+	char rt_iface[32];
+	unsigned int dest, gw, flags;
+	bool found = false;
+
+	rt_fp = fopen("/proc/net/route", "r");
+	if (!rt_fp)
+		return false;
+
+	/* Skip header line */
+	if (!fgets(rt_line, sizeof(rt_line), rt_fp)) {
+		fclose(rt_fp);
+		return false;
+	}
+
+	while (fgets(rt_line, sizeof(rt_line), rt_fp)) {
+		if (sscanf(rt_line, "%31s %x %x %x",
+			   rt_iface, &dest, &gw, &flags) == 4 &&
+		    strcmp(rt_iface, intf) == 0 && dest == 0 && gw != 0) {
+			struct in_addr gw_addr;
+
+			gw_addr.s_addr = gw;
+			strlcpy(ipAddr, inet_ntoa(gw_addr), 16);
+			found = true;
+			break;
+		}
+	}
+	fclose(rt_fp);
+
+	return found;
 }
 
 
 static int get_peer_ip_p2p_client(struct sigma_dut *dut, char *ipAddr,
 				  const char *intf, unsigned int wait_limit)
 {
-	uint32_t ipaddress, gateway, prefixLength,
-		dns1, dns2, serveraddr, lease;
+	char local_ip[IP_ADDR_STR_LEN];
+	int addr_ret;
 
-	get_dhcp_info(&ipaddress, &gateway, &prefixLength, &dns1, &dns2,
-		      &serveraddr, &lease);
+	if (!intf || !intf[0]) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"Invalid interface for peer IP address lookup");
+		return -1;
+	}
+
+	if (!ipAddr) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"Invalid peer IP address output buffer");
+		return -1;
+	}
+
+	ipAddr[0] = '\0';
+	memset(local_ip, 0, sizeof(local_ip));
+
+
 	while (wait_limit > 0) {
-		sigma_dut_print(dut, DUT_MSG_INFO, "Peer IP: %u", ipaddress);
-		if (strlen(ipaddr(serveraddr)) > 8) {
-			/* connected */
-			strlcpy(ipAddr, ipaddr(serveraddr), 16);
-			break;
+		addr_ret = get_ip_addr(intf, 0, local_ip, sizeof(local_ip));
+		if (addr_ret == 0 && local_ip[0]) {
+			/* We have a local IP address; find the gateway (DHCP
+			 * server/peer). */
+			if (get_peer_ip_from_arp(dut, ipAddr, intf) == 0)
+				return 0;
+
+			if (find_gateway(intf, ipAddr))
+				return 0;
+		} else {
+			local_ip[0] = '\0';
 		}
+
 		sleep(1);
 		wait_limit--;
 	}
-	return wait_limit == 0 ? -1 : 0;
-}
 
+	sigma_dut_print(dut, DUT_MSG_ERROR,
+			"Peer IP address lookup timed out ifname=%s", intf);
+	return -1;
+}
 
 static int get_p2p_connection_event(struct sigma_dut *dut,
 				    const char *input_intf,
@@ -390,7 +506,11 @@ static void * miracast_rtsp_thread_entry(void *ptr)
 		sigma_dut_print(dut, DUT_MSG_INFO,
 				"Waiting to start dhcp client");
 		sleep(5); /* Wait for IP */
-		miracast_start_dhcp_client(dut, output_ifname);
+		if (miracast_start_dhcp_client(dut, output_ifname) < 0) {
+			sigma_dut_print(dut, DUT_MSG_ERROR,
+					"Could not start DHCP client");
+			goto EXIT;
+		}
 		sleep(5); /* Wait for IP */
 		if (get_peer_ip_p2p_client(dut, peer_ip_address, output_ifname,
 					   wait_limit) < 0) {
@@ -1137,7 +1257,11 @@ static enum sigma_cmd_result cmd_start_wfd_connection(struct sigma_dut *dut,
 		snprintf(sig_resp_buf + strlen(sig_resp_buf),
 			 sizeof(sig_resp_buf) - strlen(sig_resp_buf),
 			 ",CLIENT");
-		miracast_start_dhcp_client(dut, output_intf);
+		if (miracast_start_dhcp_client(dut, output_intf) < 0) {
+			send_resp(dut, conn, SIGMA_ERROR,
+				  "Could not start DHCP client");
+			return 0;
+		}
 		sleep(5);
 	}
 
@@ -1296,7 +1420,12 @@ static enum sigma_cmd_result cmd_connect_go_start_wfd(struct sigma_dut *dut,
 		return 0;
 	}
 
-	miracast_start_dhcp_client(dut, output_ifname);
+	strlcpy(dut->peer_mac_address, p2p_dev_id,
+		sizeof(dut->peer_mac_address));
+	if (miracast_start_dhcp_client(dut, output_ifname) < 0) {
+		send_resp(dut, conn, SIGMA_ERROR, "Could not start DHCP client");
+		return 0;
+	}
 
 	if (get_peer_ip_p2p_client(dut, peer_ip_address, output_ifname,
 				   30) < 0) {
