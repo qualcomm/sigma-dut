@@ -540,9 +540,8 @@ static void * miracast_rtsp_thread_entry(void *ptr)
 					  1 - dut->wfd_device_type,
 					  &rtsp_session_id);
 	} else {
-		sigma_dut_print(dut, DUT_MSG_INFO,
-				"dlsym seems to have error %p %p",
-				dut->miracast_lib, extn_start_wfd_connection);
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"start_wfd_connection symbol not found");
 	}
 
 EXIT:
@@ -703,13 +702,15 @@ static void * auto_go_thread_entry(void *ptr)
 	sigma_dut_print(dut, DUT_MSG_INFO, "dlsym %p", dut->miracast_lib);
 	extn_start_wfd_connection = dlsym(dut->miracast_lib,
 					  "start_wfd_connection");
-	if (!extn_start_wfd_connection)
-		sigma_dut_print(dut, DUT_MSG_INFO, "dlsym function NULL");
-	else
+	if (!extn_start_wfd_connection) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"start_wfd_connection symbol not found");
+	} else {
 		extn_start_wfd_connection(NULL, peer_ip_address,
 					  session_management_control_port,
 					  1 - dut->wfd_device_type,
 					  &rtsp_session_id);
+	}
 
 THR_EXIT:
 	sigma_dut_print(dut, DUT_MSG_INFO, "Reached auto GO thread exit");
@@ -750,8 +751,12 @@ void miracast_sta_reset_default(struct sigma_dut *dut, struct sigma_conn *conn,
 
 	miracast_generate_string_cmd(cmd, string_cmd, sizeof(string_cmd));
 	extn_sta_reset_default = dlsym(dut->miracast_lib, "sta_reset_default");
-	if (extn_sta_reset_default)
+	if (extn_sta_reset_default) {
 		extn_sta_reset_default(string_cmd);
+	} else {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"sta_reset_default symbol not found");
+	}
 
 	/* delete threads if any */
 	/* TODO: if dut->rtsp_thread_handle running, call
@@ -1021,8 +1026,11 @@ int miracast_mdns_start_wfd_connection(struct sigma_dut *dut,
 
 	extn_start_wfd_connection = dlsym(dut->miracast_lib,
 					  "start_wfd_connection");
-	if (!extn_start_wfd_connection)
+	if (!extn_start_wfd_connection) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"start_wfd_connection symbol not found");
 		return -1;
+	}
 	if (int_init_wfd != 0) {
 		extn_start_wfd_connection(NULL, NULL, -100,
 					  1 - dut->wfd_device_type,
@@ -1310,8 +1318,11 @@ static enum sigma_cmd_result cmd_start_wfd_connection(struct sigma_dut *dut,
 
 	extn_start_wfd_connection = dlsym(dut->miracast_lib,
 					  "start_wfd_connection");
-	if (!extn_start_wfd_connection)
+	if (!extn_start_wfd_connection) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"start_wfd_connection symbol not found");
 		return -1;
+	}
 	extn_start_wfd_connection(NULL, peer_ip_address, sm_control_port,
 				  1 - dut->wfd_device_type, &rtsp_session_id);
 
@@ -1466,8 +1477,11 @@ static enum sigma_cmd_result cmd_connect_go_start_wfd(struct sigma_dut *dut,
 
 	extn_connect_go_start_wfd = dlsym(dut->miracast_lib,
 					  "connect_go_start_wfd");
-	if (!extn_connect_go_start_wfd)
+	if (!extn_connect_go_start_wfd) {
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"connect_go_start_wfd symbol not found");
 		return -1;
+	}
 	extn_connect_go_start_wfd(NULL, peer_ip_address,
 				  session_management_control_port,
 				  1 - dut->wfd_device_type, &rtsp_session_id);
@@ -1667,10 +1681,8 @@ static enum sigma_cmd_result cmd_reinvoke_wfd_session(struct sigma_dut *dut,
 					  1 - dut->wfd_device_type,
 					  &rtsp_session_id);
 	} else {
-		sigma_dut_print(dut, DUT_MSG_INFO,
-				"dlsym seems to have error %p %p",
-				dut->miracast_lib,
-				extn_start_wfd_connection);
+		sigma_dut_print(dut, DUT_MSG_ERROR,
+				"start_wfd_connection symbol not found");
 	}
 
 	return 1;
